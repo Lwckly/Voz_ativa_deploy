@@ -1,9 +1,13 @@
 import openai
 from flask import Flask, render_template, request, jsonify
 import tempfile, os
+from dotenv import load_dotenv
 
+def configure():
+    load_dotenv()
+configure()
 app = Flask(__name__)
-openai.api_key = os.getenv("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")
+openai.api_key = os.getenv("api")
 #have to create .env to ignore api
 @app.route("/")
 def index():
