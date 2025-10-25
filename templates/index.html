@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VozClara</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root{
+      --blue: #1976d2;
+      --yellow: #f9a825;
+      --muted: #6b7280;
+      --bg: #fff;
+      --panel: #f8f8f8;
+      --max-width: 760px;
+    }
+
+    html, body{
+      height: 100%;
+      margin: 0;
+      font-family: Rubik, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: #111827;
+      background: var(--bg);
+      transition: background 0.3s, color 0.3s;
+    }
+
+    body.dark {
+      background: #1f2937;
+      color: #f9fafb;
+    }
+
+    .app {
+      max-width: var(--max-width);
+      margin: 28px auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-height: calc(100vh - 56px);
+      box-sizing: border-box;
+    }
+
+    header.app-header{
+      display:flex;
+      align-items:center;
+      justify-content: center;
+      gap: 12px;
+      position: relative;
+    }
+
+    .brand {
+      display:flex;
+      flex-direction: column;
+      text-align: center;
+      gap: 2px;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size:2.4rem;
+      font-weight: 250;
+      color: #111827;
+    }
+
+    body.dark .brand h1 {
+      color: #f9fafb;
+    }
+
+    .brand p{
+      margin:0;
+      font-size:1.2rem;
+      color: var(--muted);
+    }
+
+    body.dark .brand p {
+      color: #d1d5db;
+    }
+
+    /* Dark mode button */
+    #darkModeToggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: none;
+      border: none;
+      font-size: 1.6rem;
+      cursor: pointer;
+    }
+
+    /* Center area */
+    .center {
+      display:flex;
+      flex-direction: column;
+      align-items: center;
+      gap:14px;
+      flex-grow:1;
+      justify-content: center;
+    }
+
+    .record-btn {
+      --size:150px;
+      width: var(--size);
+      height: var(--size);
+      border-radius:50%;
+      border: none;
+      display:inline-grid;
+      place-items:center;
+      background:var(--blue);
+      box-shadow: 0 8px 20px rgba(16,24,40,0.08);
+      cursor:pointer;
+      transition: transform .12s ease, background-color .18s ease;
+      user-select:none;
+      position: relative;
+    }
+    .record-btn:active { transform: scale(.98); }
+    .record-btn.recording { background: var(--yellow); }
+
+    .record-icon {
+      width:56px;
+      height:56px;
+      display:block;
+      pointer-events:none;
+    }
+    .record-icon svg { width:100%; height:100%; fill:#fff; }
+
+    .hidden { display: none !important; }
+
+    .status { font-size: 0.98rem; color: var(--muted); }
+
+    /* Result panel */
+    .result-panel {
+      background: var(--panel);
+      border-top: 3px solid #e6e6e6;
+      padding: 14px;
+      box-sizing:border-box;
+      min-height:80px;
+      display:flex;
+      flex-direction: column;
+      gap:8px;
+      border-radius: 16px;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.08); 
+      text-align: center;
+    }
+
+    body.dark .result-panel { background: #374151; border-color: #4b5563; }
+
+    .result-heading h2 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .result-content {
+      font-size:0.98rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      min-height: 40px;
+    }
+
+    /* Buttons group */
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn-icon {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-icon:hover { background: #f0f0f0; }
+    body.dark .btn-icon:hover { background: #4b5563; }
+
+    .btn-icon svg { width: 20px; height: 20px; fill: #111827; }
+    body.dark .btn-icon svg { fill: #111827; }
+
+    /* Responsiveness */
+    @media (max-width:480px){
+      .record-btn{ --size:120px; }
+    }
+
+    /* Pulse animation */
+    .record-btn.recording::after{
+      content:'';
+      position:absolute;
+      width:calc(var(--size) + 14px);
+      height:calc(var(--size) + 14px);
+      border-radius:50%;
+      background:linear-gradient(0deg, rgba(249,168,37,0.12), rgba(249,168,37,0.06));
+      z-index:-1;
+      animation: pulse 1.6s infinite;
+    }
+
+    @keyframes pulse{
+      0%{ transform: scale(.98); opacity:1; }
+      70%{ transform: scale(1.12); opacity:0.3; }
+      100%{ transform: scale(1.18); opacity:0; }
+    }
+
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <div class="brand">
+        <h1>VozClara</h1>
+        <p>Transcrição de áudio</p>
+      </div>
+      <button id="darkModeToggle" title="Alternar modo escuro">🌙</button>
+    </header>
+
+    <section class="center" aria-live="polite">
+      <button id="recordButton" class="record-btn" aria-pressed="false" aria-label="Iniciar gravação">
+        <span class="record-icon" id="iconPlay">
+          <svg viewBox="0 0 24 24">
+            <polygon points="8,5 8,19 19,12" />
+          </svg>
+        </span>
+        <span class="record-icon hidden" id="iconStop">
+          <svg viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" />
+          </svg>
+        </span>
+      </button>
+      <div id="status" class="status">Iniciar gravação</div>
+    </section>
+
+
+
+    <aside class="result-panel" aria-label="Transcrição">
+      <div class="result-heading"><h2>Transcrição</h2></div>
+      <div id="result" class="result-content">Nenhuma transcrição ainda.</div>
+    </aside>
+        <div class="button-group">
+      <!-- Clear -->
+      <button id="clearBtn" class="btn-icon" title="Limpar transcrição">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6zm2 3h14l-1.5 12.5a1 1 0 0 1-1 .5H7.5a1 1 0 0 1-1-.5L5 9zm5 2v8h2v-8H10zm4 0v8h2v-8h-2z"/></svg>
+      </button>
+
+      <!-- Copy -->
+      <button id="copyBtn" class="btn-icon" title="Copiar transcrição">
+        <svg viewBox="0 0 24 24"><path d="M16 1H4a1 1 0 0 0-1 1v14h2V3h12V1zM19 5H8a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zm-1 16H9V7h9v14z"/></svg>
+      </button>
+
+      <!-- PDF -->
+      <button id="pdfBtn" class="btn-icon" title="Baixar transcrição em PDF">
+        <svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm0 2v18h12V8h-5V3H6zm3 3h6v2H9V7zm0 4h6v2H9v-2zm0 4h4v2H9v-2z"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <script>
+    const recordBtn = document.getElementById('recordButton');
+    const iconPlay = document.getElementById('iconPlay');
+    const iconStop = document.getElementById('iconStop');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const pdfBtn = document.getElementById('pdfBtn');
+    const darkModeToggle = document.getElementById('darkModeToggle');
+
+    let mediaRecorder, audioChunks=[], lastBlob=null, recording=false;
+
+    function setRecordingUI(isRecording){
+      recording = isRecording;
+      recordBtn.classList.toggle('recording', isRecording);
+      recordBtn.setAttribute('aria-pressed', String(isRecording));
+      iconPlay.classList.toggle('hidden', isRecording);
+      iconStop.classList.toggle('hidden', !isRecording);
+      statusEl.textContent = isRecording ? 'Gravando… clique novamente para parar' : 'Processando áudio…';
+    }
+
+    async function startRecording(){
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+          lastBlob = new Blob(audioChunks,{type:'audio/webm'});
+          stream.getTracks().forEach(t=>t.stop());
+          setRecordingUI(false);
+          statusEl.textContent = 'Gravação pronta.';
+        };
+        mediaRecorder.start();
+        setRecordingUI(true);
+      } catch(err){
+        console.error(err);
+        statusEl.textContent = 'Não foi possível acessar o microfone.';
+      }
+    }
+
+    function stopRecording(){ if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop(); else setRecordingUI(false); }
+
+    recordBtn.addEventListener('click', ()=>{ recording? stopRecording() : startRecording(); });
+
+    clearBtn.addEventListener('click', ()=>{ resultEl.textContent='Nenhuma transcrição ainda.'; statusEl.textContent='Transcrição limpa.'; });
+
+    copyBtn.addEventListener('click', ()=>{
+      const text = resultEl.textContent.trim();
+      if(!text) return alert("Nenhuma transcrição para copiar!");
+      navigator.clipboard.writeText(text).then(()=>alert("Transcrição copiada ✅"));
+    });
+
+    pdfBtn.addEventListener('click', ()=>{
+      const text = resultEl.textContent.trim();
+      if(!text) return alert("Nenhuma transcrição para PDF!");
+      const doc = new jsPDF.jsPDF();
+      const lines = doc.splitTextToSize(text, 180);
+      doc.text(lines, 10, 10);
+      doc.save("transcricao.pdf");
+    });
+
+    // Dark mode toggle
+    darkModeToggle.addEventListener('click', ()=>{
+      document.body.classList.toggle('dark');
+      darkModeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+    });
+
+  </script>
+</body>
+</html>
