@@ -1,0 +1,273 @@
+/* Root variables */
+:root {
+  --blue: #1976d2;
+  --yellow: #f9a825;
+  --muted: #6b7280;
+  --bg: #fff;
+  --panel: #f8f8f8;
+  --max-width: 760px;
+}
+
+/* Reset & global */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: Rubik, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #111827;
+  background-color: var(--bg);
+  transition: background 0.3s, color 0.3s;
+}
+
+body.dark {
+  background-color: #1f2937;
+  color: #f9fafb;
+}
+
+/* Main app container */
+main.app {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100vh;
+  position: relative; /* for flex/absolute positioning children */
+  box-sizing: border-box;
+}
+
+/* Header / title images */
+.image-light {
+  display: block;
+  margin: 0 auto;
+}
+
+.image-dark {
+  display: none;
+}
+
+body.dark .image-light {
+  display: none;
+}
+
+body.dark .image-dark {
+  display: block;
+}
+
+/* Dark mode toggle button */
+#darkModeToggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  cursor: pointer;
+}
+
+/* Center area / recording */
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  flex-grow: 1;
+  justify-content: center;
+}
+
+.record-btn {
+  --size: 150px;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  border: none;
+  display: inline-grid;
+  place-items: center;
+  background: var(--blue);
+  box-shadow: 0 8px 20px rgba(16,24,40,0.08);
+  cursor: pointer;
+  transition: transform .12s ease, background-color .18s ease;
+  user-select: none;
+  position: relative;
+}
+
+.record-btn:active { transform: scale(.98); }
+.record-btn.recording { background: var(--yellow); }
+
+.record-icon {
+  width: 56px;
+  height: 56px;
+  display: block;
+  pointer-events: none;
+}
+
+.record-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: #fff;
+}
+
+.hidden { display: none !important; }
+
+.status {
+  font-size: 0.98rem;
+  color: var(--muted);
+}
+
+/* Pulse animation for recording */
+.record-btn.recording::after {
+  content: '';
+  position: absolute;
+  width: calc(var(--size) + 14px);
+  height: calc(var(--size) + 14px);
+  border-radius: 50%;
+  background: linear-gradient(0deg, rgba(249,168,37,0.12), rgba(249,168,37,0.06));
+  z-index: -1;
+  animation: pulse 1.6s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(.98); opacity: 1; }
+  70% { transform: scale(1.12); opacity: 0.3; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+
+/* Result panel */
+.result-panel {
+  background: var(--panel);
+  border-top: 3px solid #e6e6e6;
+  padding: 14px;
+  box-sizing: border-box;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 16px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+  text-align: center;
+}
+
+body.dark .result-panel {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.result-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.result-content {
+  font-size: 0.98rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 40px;
+}
+
+/* Buttons group */
+.button-group {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.btn-icon {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-icon:hover { background: #f0f0f0; }
+body.dark .btn-icon:hover { background: #4b5563; }
+
+.btn-icon svg { width: 20px; height: 20px; fill: #111827; }
+body.dark .btn-icon svg { fill: #fff; }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .record-btn { --size: 120px; }
+}
+
+/* Bottom-left + button container */
+.bottom-left-container {
+  position: fixed; /* fixed to viewport */
+  bottom: 30px;
+  left: 610px;
+  z-index: 50;
+}
+
+/* Transparent + button */
+.bottom-left-container .dropbtn {
+  background: transparent; /* no background */
+  border: none;            /* no border */
+  padding: 0;
+  cursor: pointer;
+}
+
+/* + button image */
+.bottom-left-container .dropbtn img {
+  height: 2 6px;
+  width: 26px;
+  display: block;
+  pointer-events: none; /* clicks pass to button */
+}
+
+/* Dropdown */
+.bottom-left-container .dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.bottom-left-container .dropdown-content {
+  display: none;
+  position: absolute;
+  bottom: 50px; /* shows above the button */
+  left: 0;
+  background-color: #fff;
+  min-width: 120px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  border-radius: 6px;
+  z-index: 100;
+}
+
+.bottom-left-container .dropdown-content a {
+  color: #333;
+  padding: 10px;
+  text-decoration: none;
+  display: block;
+}
+
+.bottom-left-container .dropdown-content a:hover {
+  background-color: #eee;
+}
+
+/* Show dropdown when active */
+.bottom-left-container .dropdown.show .dropdown-content {
+  display: block;
+}
+
+/* Dark mode overrides */
+body.dark .bottom-left-container .dropdown-content {
+  background-color: #222;
+}
+body.dark .bottom-left-container .dropdown-content a {
+  color: #fff;
+}
+body.dark .bottom-left-container .dropdown-content a:hover {
+  background-color: #444;
+}
+
+
+
+/* Ensure main app is relative for absolute child */
+main.app { position: relative; }
