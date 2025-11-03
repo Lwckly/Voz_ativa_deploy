@@ -3,9 +3,8 @@ from flask import Flask, render_template, request, jsonify
 import tempfile, os
 from dotenv import load_dotenv
 
-def configure():
-    load_dotenv()
-configure()
+load_dotenv()
+
 app = Flask(__name__)
 openai.api_key = os.getenv("api")
 #have to create .env to ignore api
@@ -27,3 +26,7 @@ def transcribe():
         )
     os.remove(tmp_path)
     return jsonify({"text": transcription.text})
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
