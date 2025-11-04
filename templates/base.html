@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VozClara</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link href="/static/styles.css" rel="stylesheet">
+  <link rel="icon" type="image" href="/static/lOGO.png">
+
+
+</head>
+
+<body>
+  <main class="app">
+    <div style="display:flex;justify-content:center;margin-top:10px;">
+      <img class="image-light" src="/static/title.png" height="111" width="300" alt="Title Light">
+      <img class="image-dark" src="/static/titledarkmode.png" height="111" width="300" alt="Title Dark">
+    </div>
+    <div id="termsOverlay">
+      <div id="termsBox">
+        <h2>Terms and Services</h2>
+        <div id="termsText">
+          <p>Welcome to our service! Please read these terms carefully before using this site.</p>
+          <p>By clicking “I Agree”, you confirm that you have read and accepted our general terms of service, including our data policy and user guidelines.</p>
+          <p>This popup is a placeholder. Replace this text with your actual Terms and Conditions or link to a full version.</p>
+        </div>
+        <button id="acceptButton">I Agree</button>
+      </div>
+    </div>
+
+    <button id="darkModeToggle" title="Alternar modo escuro">🌙</button>
+
+    <section class="center" aria-live="polite" style="margin-top:20px;">
+      <button id="recordButton" class="record-btn" aria-pressed="false" aria-label="Iniciar gravação">
+        <span class="record-icon" id="iconPlay">
+          <svg viewBox="0 0 24 24"><polygon points="8,5 8,19 19,12"/></svg>
+        </span>
+        <span class="record-icon hidden" id="iconStop">
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+        </span>
+      </button>
+      <div id="status" class="status">Iniciar gravação</div>
+    </section>
+
+    <aside class="result-panel" aria-label="Transcrição" style="margin-top:20px;">
+      <div class="result-heading"><h2>Transcrição</h2></div>
+      <div id="result" class="result-content">Nenhuma transcrição ainda.</div>
+
+      <!-- Dropdown -->
+      
+    </aside>
+    <!-- Bottom-left floating + button -->
+    <div class="bottom-left-container">
+      <div class="dropdown">
+        <button class="dropbtn">
+          <img src="/static/Plussign.png" alt="Opções">
+        </button>
+        <div class="dropdown-content">
+          <a href="#" id="downloadPdf">PDF</a>
+          <a href="#" id="downloadDoc">DOC</a>
+          <a href="#" id="historyBtn">Histórico</a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ---------------- RECORDING ----------------
+    const recordBtn = document.getElementById('recordButton');
+    const iconPlay = document.getElementById('iconPlay');
+    const iconStop = document.getElementById('iconStop');
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+
+    let mediaRecorder, audioChunks = [], recording = false;
+
+    function setRecordingUI(isRecording){
+      recording = isRecording;
+      recordBtn.classList.toggle('recording', isRecording);
+      recordBtn.setAttribute('aria-pressed', String(isRecording));
+      iconPlay.classList.toggle('hidden', isRecording);
+      iconStop.classList.toggle('hidden', !isRecording);
+      statusEl.textContent = isRecording ? 'Gravando… clique novamente para parar' : 'Processando áudio…';
+    }
+
+    async function startRecording(){
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t=>t.stop());
+          setRecordingUI(false);
+          statusEl.textContent = 'Gravação pronta.';
+        };
+        mediaRecorder.start();
+        setRecordingUI(true);
+      } catch(err){
+        console.error(err);
+        statusEl.textContent = 'Não foi possível acessar o microfone.';
+      }
+    }
+
+    function stopRecording(){ 
+      if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop(); 
+      else setRecordingUI(false); 
+    }
+
+    recordBtn.addEventListener('click', ()=>recording ? stopRecording() : startRecording());
+
+    // ---------------- DROPDOWN ----------------
+    const dropbtn = document.querySelector('.dropbtn');
+    dropbtn.addEventListener('click', e => {
+      e.stopPropagation(); // prevent global click
+      dropbtn.parentElement.classList.toggle('show');
+    });
+
+    window.addEventListener('click', () => {
+      document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('show'));
+    });
+
+
+    // ---------------- DOWNLOAD PDF ----------------
+    document.getElementById('downloadPdf').addEventListener('click', ()=>{
+      const text = resultEl.textContent.trim();
+      if(!text) return alert("Nenhuma transcrição para PDF!");
+      const doc = new jsPDF.jsPDF();
+      const lines = doc.splitTextToSize(text, 180);
+      doc.text(lines, 10, 10);
+      doc.save("transcricao.pdf");
+    });
+
+    // ---------------- DOWNLOAD DOC ----------------
+    document.getElementById('downloadDoc').addEventListener('click', ()=>{
+      const text = resultEl.textContent.trim();
+      if(!text) return alert("Nenhuma transcrição para DOC!");
+      const blob = new Blob([text], { type: "application/msword" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "transcricao.doc";
+      link.click();
+    });
+
+    // ---------------- HISTORY ----------------
+    document.getElementById('historyBtn').addEventListener('click', ()=>alert("Histórico ainda não implementado."));
+
+    // ---------------- DARK MODE ----------------
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    const lightImg = document.querySelector('.image-light');
+    const darkImg = document.querySelector('.image-dark');
+
+    function updateImages() {
+      if(document.body.classList.contains('dark')){
+        lightImg.style.display = 'none';
+        darkImg.style.display = 'block';
+      } else {
+        lightImg.style.display = 'block';
+        darkImg.style.display = 'none';
+      }
+    }
+
+    darkModeToggle.addEventListener('click', ()=>{
+      document.body.classList.toggle('dark');
+      darkModeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+      updateImages();
+    });
+
+    // Initial dark mode based on system preference
+    if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+      document.body.classList.add('dark');
+    }
+    updateImages();
+
+  </script>
+</body>
+</html>
+
