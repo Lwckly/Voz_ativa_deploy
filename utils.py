@@ -4,117 +4,136 @@ import numpy as np
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 from pydub import AudioSegment
 import io
-import librosa
 
-# --- 1. CARREGAMENTO DO MODELO WHISPER ---
-# Esta parte é a mesma do nosso servidor, carregamos o modelo uma vez.
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_NAME = "openai/whisper-base"
+# ---------------------------------------------------------------------
+# 🎙️ 1️⃣ AUDIO CAPTURE + PROCESSING FUNCTION
+# ---------------------------------------------------------------------
+def audio_record():
+    """
+    Records audio from the microphone, processes and normalizes it,
+    returning a NumPy array, logs, and status_record dictionary.
+    """
+    logs = []
+    status_record = {
+        "mic_ready": 0,
+        "audio_recorded": 0,
+        "audio_processed": 0,
+        "record_success": 0
+    }
 
-print("--- Iniciando Script de Teste de Transcrição ---")
-print(f"Usando dispositivo: {DEVICE}")
-print(f"Carregando modelo Whisper: '{MODEL_NAME}'...")
+    recognizer = sr.Recognizer()
 
-try:
-    processor = WhisperProcessor.from_pretrained(MODEL_NAME)
-    model = WhisperForConditionalGeneration.from_pretrained(MODEL_NAME).to(DEVICE)
-    print("Modelo carregado com sucesso!")
-except Exception as e:
-    print(f"Erro fatal ao carregar o modelo: {e}")
-    exit()
+    try:
+        with sr.Microphone(sample_rate=16000) as source:
+            logs.append("🎙️ Ajustando para o ruído ambiente...")
+            recognizer.adjust_for_ambient_noise(source, duration=2)
+            status_record["mic_ready"] = 1
 
-# --- 2. LÓGICA DE GRAVAÇÃO E TRANSCRIÇÃO ---
+            audio_data = recognizer.listen(source, timeout=10, phrase_time_limit=10)
+            logs.append("✅ Gravação concluída.")
+            status_record["audio_recorded"] = 1
 
-# Inicializa o reconhecedor de fala
-recognizer = sr.Recognizer()
+            wav_bytes = audio_data.get_wav_data()
+            audio_segment = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
 
-try:
-    # Usa o microfone como fonte de áudio
-    with sr.Microphone(sample_rate=16000) as source:
-        print("\nAjustando para o ruído ambiente, por favor aguarde...")
-        # Ajusta o nível de energia do reconhecedor para o ruído ambiente
-        recognizer.adjust_for_ambient_noise(source, duration=2)
-        
-        # Aumenta o timeout e phrase_time_limit para capturar mais áudio
-        print("\nPode falar! Estou ouvindo... (fale por pelo menos 2-3 segundos)")
+            logs.append(
+                f"Duração: {len(audio_segment)/1000:.2f}s | "
+                f"Sample rate: {audio_segment.frame_rate}Hz | "
+                f"Canais: {audio_segment.channels}"
+            )
 
-        # Escuta o áudio do microfone com timeout maior
-        audio_data = recognizer.listen(source, timeout=10, phrase_time_limit=10)
+            # Convert to mono and ensure 16kHz
+            if audio_segment.channels > 1:
+                audio_segment = audio_segment.set_channels(1)
+            if audio_segment.frame_rate != 16000:
+                audio_segment = audio_segment.set_frame_rate(16000)
 
-        print("\nGravação concluída, processando...")
+            # Convert to numpy array
+            samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)
 
-        # Converte o áudio gravado para o formato de bytes WAV
-        wav_bytes = audio_data.get_wav_data()
-        print(f"Tamanho do áudio capturado: {len(wav_bytes)} bytes")
+            # Normalize audio
+            if audio_segment.sample_width == 2:
+                samples = samples / 32768.0
+            elif audio_segment.sample_width == 4:
+                samples = samples / 2147483648.0
+            else:
+                samples = samples / 128.0
 
-        # Converte os bytes WAV para o formato que o Whisper precisa (array NumPy)
-        # Usamos librosa para melhor processamento
-        audio_segment = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
-        
-        # Debug: informações sobre o áudio
-        print(f"Duração do áudio: {len(audio_segment) / 1000:.2f} segundos")
-        print(f"Sample rate: {audio_segment.frame_rate} Hz")
-        print(f"Canais: {audio_segment.channels}")
-        
-        # Converte para mono se necessário
-        if audio_segment.channels > 1:
-            audio_segment = audio_segment.set_channels(1)
-        
-        # Garante que o sample rate seja 16kHz
-        if audio_segment.frame_rate != 16000:
-            audio_segment = audio_segment.set_frame_rate(16000)
-        
-        # Converte para array numpy
-        samples = np.array(audio_segment.get_array_of_samples()).astype(np.float32)
-        
-        # Normaliza o áudio corretamente
-        if audio_segment.sample_width == 2:  # 16-bit
-            samples = samples / 32768.0
-        elif audio_segment.sample_width == 4:  # 32-bit
-            samples = samples / 2147483648.0
-        else:  # 8-bit
-            samples = samples / 128.0
-        
-        print(f"Shape do array de áudio: {samples.shape}")
-        print(f"Valores min/max do áudio: {samples.min():.4f} / {samples.max():.4f}")
-        
-        # Verifica se o áudio não está muito baixo
-        if np.abs(samples).max() < 0.01:
-            print("AVISO: Áudio muito baixo! Tente falar mais alto.")
-        
-        # Processa e transcreve o áudio com o Whisper
-        print("Processando com Whisper...")
+            logs.append(
+                f"✅ Áudio processado: shape={samples.shape}, "
+                f"min/max={samples.min():.4f}/{samples.max():.4f}"
+            )
+            status_record["audio_processed"] = 1
+            status_record["record_success"] = 1
+
+            return data, logs, status_record
+
+    except Exception as e:
+        logs.append(f"❌ Erro na captura ou processamento do áudio: {e}")
+        return None, logs, status_record
+
+
+# ---------------------------------------------------------------------
+# 🧠 2️⃣ WHISPER MODEL FUNCTION
+# ---------------------------------------------------------------------
+def audio_transcribe(data):
+    """
+    Loads Whisper model, processes the provided audio samples, and
+    returns the transcription, logs, and status_transcribe dictionary.
+    """
+    logs = []
+    status_transcribe = {
+        "model_loaded": 0,
+        "features_extracted": 0,
+        "transcription_generated": 0,
+        "transcribe_success": 0
+        "device":0
+    }
+
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    MODEL_NAME = "openai/whisper-base"
+
+    logs.append(f"🧠 Usando dispositivo: {DEVICE}")
+    if device == "cuda":
+        status_transcribe["device"]=1
+    logs.append(f"Carregando modelo Whisper: '{MODEL_NAME}'...")
+
+    try:
+        processor = WhisperProcessor.from_pretrained(MODEL_NAME)
+        model = WhisperForConditionalGeneration.from_pretrained(MODEL_NAME).to(DEVICE)
+        logs.append("✅ Modelo Whisper carregado com sucesso!")
+        status_transcribe["model_loaded"] = 1
+    except Exception as e:
+        logs.append(f"❌ Erro ao carregar modelo: {e}")
+        return None, logs, status_transcribe
+
+    try:
         input_features = processor(
             samples,
             sampling_rate=16000,
             return_tensors="pt"
         ).input_features.to(DEVICE)
-        
-        print(f"Shape das features de entrada: {input_features.shape}")
+        logs.append(f"🎛️ Features extraídas: shape={input_features.shape}")
+        status_transcribe["features_extracted"] = 1
 
-        # Gera a transcrição com parâmetros melhorados
         predicted_ids = model.generate(
             input_features,
             max_length=448,
             num_beams=5,
             do_sample=True,
             temperature=0.6,
-            language="pt",  # Força português
+            language="pt",
             task="transcribe"
         )
-        
+
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
+        logs.append(f"✅ Transcrição gerada: '{transcription}'")
+        status_transcribe["transcription_generated"] = 1
+        status_transcribe["transcribe_success"] = 1
 
-        # Imprime o resultado final
-        print("-" * 50)
-        print(f"TEXTO TRANSCRITO: '{transcription}'")
-        print(f"Tamanho da transcrição: {len(transcription)} caracteres")
-        print("-" * 50)
+        return transcription, logs, status_transcribe
 
-except sr.UnknownValueError:
-    print("Não foi possível entender o áudio. Tente falar mais claramente.")
-except sr.RequestError as e:
-    print(f"Erro no serviço de reconhecimento; {e}")
-except Exception as e:
-    print(f"Ocorreu um erro inesperado: {e}")
+    except Exception as e:
+        logs.append(f"❌ Erro durante a transcrição: {e}")
+        return None, logs, status_transcribe
