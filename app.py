@@ -9,16 +9,13 @@ app = Flask(__name__)
 
 @app.route("/", methods=["POST","GET","HEAD"])
 def index():
-    if request.methods=="POST":
-        raw_audio = audio_record()
-        transcription= audio_transcribe(raw_audio)
+    return render_template("index.html")
         
-    else:
-        return render_template("index.html")
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
+
 
 
 
