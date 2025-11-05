@@ -67,7 +67,7 @@ def audio_record():
             status_record["audio_processed"] = 1
             status_record["record_success"] = 1
 
-            return data, logs, status_record
+            return samples, logs, status_record
 
     except Exception as e:
         logs.append(f"❌ Erro na captura ou processamento do áudio: {e}")
@@ -77,7 +77,7 @@ def audio_record():
 # ---------------------------------------------------------------------
 # 🧠 2️⃣ WHISPER MODEL FUNCTION
 # ---------------------------------------------------------------------
-def audio_transcribe(data):
+def audio_transcribe(samples):
     """
     Loads Whisper model, processes the provided audio samples, and
     returns the transcription, logs, and status_transcribe dictionary.
@@ -132,7 +132,7 @@ def audio_transcribe(data):
         status_transcribe["transcription_generated"] = 1
         status_transcribe["transcribe_success"] = 1
 
-        return transcription, logs, status_transcribe
+        return transcription,logs,status_transcribe
 
     except Exception as e:
         logs.append(f"❌ Erro durante a transcrição: {e}")
