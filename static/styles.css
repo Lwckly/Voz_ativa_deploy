@@ -14,6 +14,7 @@ html, body {
   padding: 0;
   height: 100%;
   width: 100%;
+  min-height:100%
   font-family: Rubik, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   color: #111827;
   background-color: var(--bg);
@@ -23,6 +24,7 @@ html, body {
 body.dark {
   background-color: #1f2937;
   color: #f9fafb;
+  min-height: 100vh;
 }
 
 /* Main app container */
@@ -323,6 +325,7 @@ body.dark .bottom-left-container .dropdown-content a:hover {
 
 /* Ensure main app is relative for absolute child */
 main.app { position: relative; }
+
 
 
 
