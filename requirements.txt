@@ -107,4 +107,4 @@ Werkzeug==3.1.3
 wheel==0.45.1
 xxhash==3.5.0
 yarl==1.20.1
-
+gunicorn==23.0.0
