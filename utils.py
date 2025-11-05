@@ -87,7 +87,7 @@ def audio_transcribe(data):
         "model_loaded": 0,
         "features_extracted": 0,
         "transcription_generated": 0,
-        "transcribe_success": 0
+        "transcribe_success": 0,
         "device":0
     }
 
