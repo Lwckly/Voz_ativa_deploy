@@ -200,8 +200,9 @@ body.dark .btn-icon svg { fill: #fff; }
 
 /* Bottom-left + button container */
 .bottom-left-container {
-  position: relative;
-  vertical-align:center /* fixed to viewport */
+  display: flex;
+  justify-content: center; /* Centers horizontally */
+  align-items: center; /* fixed to viewport */
   z-index: 50;
 }
 
@@ -322,5 +323,6 @@ body.dark .bottom-left-container .dropdown-content a:hover {
 
 /* Ensure main app is relative for absolute child */
 main.app { position: relative; }
+
 
 
