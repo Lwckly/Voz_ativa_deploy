@@ -2,10 +2,7 @@
 
 {% block head %}
 <title>VozClara</title>
-
-<!-- LAME.js encoder -->
-<script src="https://unpkg.com/lamejs@1.2.0/lame.min.js"></script>
-
+<!-- removed LAME.js (not needed for WAV) but you can keep it if you still use mp3 elsewhere -->
 {% endblock %}
 
 {% block body %}
@@ -63,49 +60,19 @@
 </main>
 
 <script>
-/* ============================================================
-   MP3 CONVERSION USING LAME.JS
-   ============================================================ */
-async function convertBlobToMp3(blob) {
-  const arrayBuffer = await blob.arrayBuffer();
-  const audioCtx = new AudioContext();
-  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+/* -------------------------
+   WAV conversion & upload
+   - Convert recorded Blob (webm/opus) -> WAV PCM16 mono 16kHz
+   - Upload WAV as "file" in FormData to /upload
+   ------------------------- */
 
-  const raw = audioBuffer.getChannelData(0);  
-  const sampleRate = audioBuffer.sampleRate;
-
-  const mp3Encoder = new lamejs.Mp3Encoder(1, sampleRate, 128);
-
-  const samples = new Int16Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    samples[i] = raw[i] * 32767;
-  }
-
-  const mp3Data = [];
-  const maxSamples = 1152;
-
-  for (let i = 0; i < samples.length; i += maxSamples) {
-    const chunk = samples.subarray(i, i + maxSamples);
-    const mp3buf = mp3Encoder.encodeBuffer(chunk);
-    if (mp3buf.length > 0) mp3Data.push(mp3buf);
-  }
-
-  const end = mp3Encoder.flush();
-  if (end.length > 0) mp3Data.push(end);
-
-  return new Blob(mp3Data, { type: "audio/mp3" });
-}
-
-/* ============================================================
-   RECORDING LOGIC
-   ============================================================ */
 const recordBtn = document.getElementById('recordButton');
 const iconPlay = document.getElementById('iconPlay');
 const iconStop = document.getElementById('iconStop');
 const statusEl = document.getElementById('status');
 const resultEl = document.getElementById('result');
 
-let mediaRecorder, audioChunks = [], recording = false;
+let mediaRecorder, mediaStream, audioChunks = [], recording = false;
 
 function setRecordingUI(isRecording){
   recording = isRecording;
@@ -116,64 +83,181 @@ function setRecordingUI(isRecording){
   statusEl.textContent = isRecording ? "Gravando… clique novamente para parar" : "Processando áudio…";
 }
 
+/* --- WAV helper functions --- */
+
+// write ascii string to DataView
+function writeStr(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function floatTo16BitPCM(float32Array) {
+  const buffer = new ArrayBuffer(float32Array.length * 2);
+  const view = new DataView(buffer);
+  let offset = 0;
+  for (let i = 0; i < float32Array.length; i++, offset += 2) {
+    let s = Math.max(-1, Math.min(1, float32Array[i]));
+    s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    view.setInt16(offset, Math.round(s), true);
+  }
+  return new Uint8Array(buffer);
+}
+
+function buildWavFile(pcm16bytes, sampleRate) {
+  const buffer = new ArrayBuffer(44 + pcm16bytes.length);
+  const view = new DataView(buffer);
+
+  writeStr(view, 0, 'RIFF');
+  view.setUint32(4, 36 + pcm16bytes.length, true);
+  writeStr(view, 8, 'WAVE');
+  writeStr(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // chunk size
+  view.setUint16(20, 1, true);  // PCM
+  view.setUint16(22, 1, true);  // channels = 1
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate = sampleRate * blockAlign
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeStr(view, 36, 'data');
+  view.setUint32(40, pcm16bytes.length, true);
+  new Uint8Array(buffer, 44).set(pcm16bytes);
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+// linear resample
+function resampleLinear(input, srcRate, dstRate) {
+  if (srcRate === dstRate) return input;
+  const srcLength = input.length;
+  const dstLength = Math.round(srcLength * dstRate / srcRate);
+  const out = new Float32Array(dstLength);
+  const ratio = (srcLength - 1) / (dstLength - 1);
+  for (let i = 0; i < dstLength; i++) {
+    const idx = i * ratio;
+    const left = Math.floor(idx);
+    const right = Math.min(left + 1, srcLength - 1);
+    const t = idx - left;
+    out[i] = input[left] * (1 - t) + input[right] * t;
+  }
+  return out;
+}
+
+// downmix to mono
+function downmixToMono(buffer) {
+  if (buffer.numberOfChannels === 1) return buffer.getChannelData(0);
+  const len = buffer.length;
+  const out = new Float32Array(len);
+  const numCh = buffer.numberOfChannels;
+  for (let c = 0; c < numCh; c++) {
+    const ch = buffer.getChannelData(c);
+    for (let i = 0; i < len; i++) out[i] += ch[i];
+  }
+  for (let i = 0; i < len; i++) out[i] /= numCh;
+  return out;
+}
+
+/* Convert a recorded Blob (webm/opus) to WAV PCM16 mono 16k */
+async function blobToWav16kMono(blob) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  // downmix
+  let mono = downmixToMono(audioBuffer);
+  const srcRate = audioBuffer.sampleRate;
+  const dstRate = 16000;
+
+  // resample
+  if (srcRate !== dstRate) mono = resampleLinear(mono, srcRate, dstRate);
+
+  // convert to PCM16 bytes and build WAV blob
+  const pcm16 = floatTo16BitPCM(mono);
+  const wavBlob = buildWavFile(pcm16, dstRate);
+
+  // close audio context if supported
+  if (typeof audioCtx.close === 'function') audioCtx.close();
+
+  return { wavBlob, pcmFloat32: mono, sampleRate: dstRate };
+}
+
+/* --- upload WAV --- */
+async function uploadWav(wavBlob, filename = 'gravacao.wav') {
+  const formData = new FormData();
+  formData.append('file', wavBlob, filename);
+  return fetch('/upload', {
+    method: 'POST',
+    body: formData
+  });
+}
+
+/* --- Recording flow --- */
 async function startRecording(){
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     audioChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder = new MediaRecorder(mediaStream);
 
-    mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+    mediaRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
 
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
+      mediaStream.getTracks().forEach(t => t.stop());
       setRecordingUI(false);
-      statusEl.textContent = "Convertendo para MP3...";
+      statusEl.textContent = "Processando áudio (convertendo para WAV)...";
 
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      const mp3Blob = await convertBlobToMp3(blob);
+      const rawBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      try {
+        const { wavBlob, pcmFloat32, sampleRate } = await blobToWav16kMono(rawBlob);
+        statusEl.textContent = "Enviando WAV para o servidor...";
+        const res = await uploadWav(wavBlob, 'gravacao_16k_mono.wav');
 
-      // Download MP3 file
-      const url = URL.createObjectURL(mp3Blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "gravacao.mp3";
-      a.click();
+        if (!res.ok) {
+          const txt = await res.text();
+          console.error('Upload error', res.status, txt);
+          statusEl.textContent = "Erro no upload.";
+          resultEl.textContent = "Erro do servidor: " + res.status;
+          return;
+        }
 
-      statusEl.textContent = "MP3 pronto para download!";
+        const json = await res.json();
+        statusEl.textContent = "Upload concluído!";
+        resultEl.textContent = json.transcription || '(sem texto)';
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Erro ao processar/enviar áudio.";
+      }
     };
 
     mediaRecorder.start();
     setRecordingUI(true);
+    statusEl.textContent = "Gravando (clique para parar)...";
 
-  } catch(err){
+  } catch (err) {
     console.error(err);
     statusEl.textContent = "Não foi possível acessar o microfone.";
+    setRecordingUI(false);
   }
 }
 
-function stopRecording(){ 
-  if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
-  else setRecordingUI(false);
+function stopRecording(){
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  else {
+    setRecordingUI(false);
+    statusEl.textContent = "Nenhuma gravação ativa.";
+  }
 }
 
 recordBtn.addEventListener('click', ()=> recording ? stopRecording() : startRecording());
 
-/* ============================================================
-   DROPDOWN
-   ============================================================ */
+/* --- UI extras (downloads, dropdown, dark mode) --- */
 const dropbtn = document.querySelector('.dropbtn');
-dropbtn.addEventListener('click', e => {
-  e.stopPropagation();
-  dropbtn.parentElement.classList.toggle('show');
-});
+if (dropbtn) {
+  dropbtn.addEventListener('click', e => { e.stopPropagation(); dropbtn.parentElement.classList.toggle('show'); });
+}
 window.addEventListener('click', () => {
   document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('show'));
 });
 
-/* ============================================================
-   DOWNLOAD PDF
-   ============================================================ */
-document.getElementById('downloadPdf').addEventListener('click', ()=>{
+document.getElementById('downloadPdf').addEventListener('click', ()=> {
   const text = resultEl.textContent.trim();
   if(!text) return alert("Nenhuma transcrição para PDF!");
   const doc = new jsPDF.jsPDF();
@@ -182,10 +266,7 @@ document.getElementById('downloadPdf').addEventListener('click', ()=>{
   doc.save("transcricao.pdf");
 });
 
-/* ============================================================
-   DOWNLOAD DOC
-   ============================================================ */
-document.getElementById('downloadDoc').addEventListener('click', ()=>{
+document.getElementById('downloadDoc').addEventListener('click', ()=> {
   const text = resultEl.textContent.trim();
   if(!text) return alert("Nenhuma transcrição para DOC!");
   const blob = new Blob([text], { type: "application/msword" });
@@ -195,14 +276,10 @@ document.getElementById('downloadDoc').addEventListener('click', ()=>{
   link.click();
 });
 
-/* ============================================================
-   HISTORY (placeholder)
-   ============================================================ */
-document.getElementById('historyBtn').addEventListener('click', ()=>alert("Histórico ainda não implementado."));
+document.getElementById('historyBtn').addEventListener('click', ()=> {
+  alert("Histórico ainda não implementado.");
+});
 
-/* ============================================================
-   DARK MODE
-   ============================================================ */
 const darkModeToggle = document.getElementById('darkModeToggle');
 const lightImg = document.querySelector('.image-light');
 const darkImg = document.querySelector('.image-dark');
@@ -217,7 +294,7 @@ function updateImages() {
   }
 }
 
-darkModeToggle.addEventListener('click', ()=>{
+darkModeToggle.addEventListener('click', ()=> {
   document.body.classList.toggle('dark');
   darkModeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
   updateImages();
@@ -227,6 +304,7 @@ if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matche
   document.body.classList.add('dark');
 }
 updateImages();
+
 </script>
 
 {% endblock %}
